@@ -8,7 +8,7 @@ const option = {
 let port;
 
 //x y 云台 灯光 视角
-let array = [127, 127, 20, 0, 1];
+let array = [127, 127, 90, 0, 1];
 
 let temp;
 let angle_roll;
@@ -41,8 +41,8 @@ const connect = async () => {
 
     await port.open(option);
 
-    const { usbProductId, usbVendorId } = port.getInfo();
-    console.log(usbProductId, usbVendorId);
+    // const { usbProductId, usbVendorId } = port.getInfo();
+    // console.log(usbProductId, usbVendorId);
 
     // 读取流
     const reader = port.readable.getReader();
@@ -60,12 +60,14 @@ const connect = async () => {
       );
 
       const temp_hex = binaryArray.slice(0, 4); //温度
-      const angle_roll_hex = binaryArray.slice(4, 8); //角度
-      const angle_pitch_hex = binaryArray.slice(8, 12); // 俯仰
-      const left_linear_speed_hex = binaryArray.slice(12, 14); //左轮速度
-      const right_linear_speed_hex = binaryArray.slice(14, 16); //右轮速度
+      const angle_yaw_hex = binaryArray.slice(4, 8); //偏航
+      const angle_roll_hex = binaryArray.slice(8, 12); //角度
+      const angle_pitch_hex = binaryArray.slice(12, 16); // 俯仰
+      const left_linear_speed_hex = binaryArray.slice(16, 18); //左轮速度
+      const right_linear_speed_hex = binaryArray.slice(18, 20); //右轮速度
 
       temp = hexToFloat(temp_hex);
+      angle_yaw = hexToFloat(angle_yaw_hex);
       angle_roll = hexToFloat(angle_roll_hex);
       angle_pitch = hexToFloat(angle_pitch_hex);
       left_linear_speed = hexToFloat(left_linear_speed_hex);
@@ -85,7 +87,7 @@ const connect = async () => {
       );
 
       if (temp < 100 && temp > 2) {
-        let str = `温度:${temp}角度:${angle_roll}° 俯仰:${angle_pitch}° 光线亮度:${array[3]}`;
+        let str = `温度:${temp} 偏航:${angle_yaw}° 角度:${angle_roll}° 俯仰:${angle_pitch}° 光线亮度:${array[3]}`;
 
         displayValue.textContent = str;
       }
@@ -148,12 +150,67 @@ const change = async () => {
   }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("connect").addEventListener("click", async () => {
     window.alert(
       "前进 w ，后退 s ，左转 a ，右转 d  ，摄像头抬头 q ，摄像头低头 e ，增加亮度 1 ，减少亮度 2 ，截图 Tab"
     );
     connect();
+  });
+
+  let mediaRecorder;
+  let recordedChunks = [];
+
+  // 获取摄像头
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoElement.srcObject = stream;
+
+    mediaRecorder = new MediaRecorder(stream);
+
+    // 处理数据
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    // 停止录制
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, {
+        type: "video/webm",
+      });
+      recordedChunks = [];
+
+      //下载链接
+      const videoURL = URL.createObjectURL(blob);
+      downloadLink.href = videoURL;
+      downloadLink.download = "robot_video.webm";
+      downloadLink.style.display = "block";
+      downloadLink.textContent = "下载视频";
+    };
+  } catch (error) {
+    console.error("无法获取摄像头", error);
+  }
+
+  // 开始录制
+  startButton.addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state === "inactive") {
+      mediaRecorder.start();
+      // console.log("开始录制...");
+      startButton.disabled = true;
+      stopButton.disabled = false;
+    }
+  });
+
+  // 停止录制
+  stopButton.addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+      // console.log("停止录制...");
+      startButton.disabled = false;
+      stopButton.disabled = true;
+    }
   });
 
   document.addEventListener("keydown", async (event) => {
@@ -203,10 +260,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     //摄像头上升
     if (event.key === "q") {
-      if (array[2] < 50) {
+      if (array[2] < 115) {
         array[2] += 1;
       } else {
-        array[2] = 50;
+        array[2] = 115;
       }
       console.log(array);
       await change();
@@ -214,10 +271,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     //摄像头下降
     if (event.key === "e") {
-      if (array[2] > 0) {
+      if (array[2] > 45) {
         array[2] -= 1;
       } else {
-        array[2] = 0;
+        array[2] = 45;
       }
       console.log(array);
       await change();
@@ -292,62 +349,62 @@ document.addEventListener("DOMContentLoaded", () => {
       await change();
     }
   });
-
-  //下载
-  document.addEventListener("DOMContentLoaded", async () => {
-    let mediaRecorder;
-    let recordedChunks = [];
-
-    // 获取摄像头
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoElement.srcObject = stream;
-
-      mediaRecorder = new MediaRecorder(stream);
-
-      // 处理数据
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunks.push(event.data);
-        }
-      };
-
-      // 停止录制
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, {
-          type: "video/webm",
-        });
-        recordedChunks = [];
-
-        //下载链接
-        const videoURL = URL.createObjectURL(blob);
-        downloadLink.href = videoURL;
-        downloadLink.download = "robot_video.webm";
-        downloadLink.style.display = "block";
-        downloadLink.textContent = "下载视频";
-      };
-    } catch (error) {
-      console.error("无法获取摄像头", error);
-    }
-
-    // 开始录制
-    startButton.addEventListener("click", () => {
-      if (mediaRecorder && mediaRecorder.state === "inactive") {
-        mediaRecorder.start();
-        // console.log("开始录制...");
-        startButton.disabled = true;
-        stopButton.disabled = false;
-      }
-    });
-
-    // 停止录制
-    stopButton.addEventListener("click", () => {
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-        // console.log("停止录制...");
-        startButton.disabled = false;
-        stopButton.disabled = true;
-      }
-    });
-  });
 });
+
+// //下载
+// document.addEventListener("DOMContentLoaded", async () => {
+//   let mediaRecorder;
+//   let recordedChunks = [];
+
+//   // 获取摄像头
+//   try {
+//     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+//     videoElement.srcObject = stream;
+
+//     mediaRecorder = new MediaRecorder(stream);
+
+//     // 处理数据
+//     mediaRecorder.ondataavailable = (event) => {
+//       if (event.data.size > 0) {
+//         recordedChunks.push(event.data);
+//       }
+//     };
+
+//     // 停止录制
+//     mediaRecorder.onstop = () => {
+//       const blob = new Blob(recordedChunks, {
+//         type: "video/webm",
+//       });
+//       recordedChunks = [];
+
+//       //下载链接
+//       const videoURL = URL.createObjectURL(blob);
+//       downloadLink.href = videoURL;
+//       downloadLink.download = "robot_video.webm";
+//       downloadLink.style.display = "block";
+//       downloadLink.textContent = "下载视频";
+//     };
+//   } catch (error) {
+//     console.error("无法获取摄像头", error);
+//   }
+
+//   // 开始录制
+//   startButton.addEventListener("click", () => {
+//     if (mediaRecorder && mediaRecorder.state === "inactive") {
+//       mediaRecorder.start();
+//       // console.log("开始录制...");
+//       startButton.disabled = true;
+//       stopButton.disabled = false;
+//     }
+//   });
+
+//   // 停止录制
+//   stopButton.addEventListener("click", () => {
+//     if (mediaRecorder && mediaRecorder.state === "recording") {
+//       mediaRecorder.stop();
+//       // console.log("停止录制...");
+//       startButton.disabled = false;
+//       stopButton.disabled = true;
+//     }
+//   });
+// });
